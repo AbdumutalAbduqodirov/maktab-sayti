@@ -1,6 +1,18 @@
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import { ScheduleRow, WEEKDAYS } from "@/lib/types";
+import { WEEKDAYS } from "@/lib/types";
+
+type ScheduleItem = {
+  id: string;
+  class_name: string;
+  weekday: number;
+  lesson_number: number;
+  subject: string;
+  room: string | null;
+  room2: string | null;
+  t1: { full_name: string } | null;
+  t2: { full_name: string } | null;
+};
 
 export default async function ScheduleBlock({ sinf }: { sinf?: string }) {
   const { data: all } = await supabase
@@ -13,14 +25,17 @@ export default async function ScheduleBlock({ sinf }: { sinf?: string }) {
 
   const selected = sinf && classes.includes(sinf) ? sinf : classes[0];
 
-  let rows: ScheduleRow[] = [];
+  let rows: ScheduleItem[] = [];
   if (selected) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("schedule")
-      .select("id, class_name, weekday, lesson_number, subject, room, teachers(full_name)")
+      .select(
+        "id, class_name, weekday, lesson_number, subject, room, room2, t1:teachers!teacher_id(full_name), t2:teachers!teacher2_id(full_name)"
+      )
       .eq("class_name", selected)
       .order("lesson_number");
-    rows = (data ?? []) as unknown as ScheduleRow[];
+    if (error) console.error("Dars jadvali xatosi:", error.message);
+    rows = (data ?? []) as unknown as ScheduleItem[];
   }
 
   const maxLesson = rows.reduce((m, r) => Math.max(m, r.lesson_number), 0);
@@ -70,15 +85,24 @@ export default async function ScheduleBlock({ sinf }: { sinf?: string }) {
                       const cell = rows.find(
                         (r) => r.weekday === di + 1 && r.lesson_number === n
                       );
+                      // O'qituvchi va uning xonasi ketma-ket: avval 1-, keyin 2-o'qituvchi
+                      const people = cell
+                        ? [
+                            { name: cell.t1?.full_name, room: cell.room },
+                            { name: cell.t2?.full_name, room: cell.room2 },
+                          ].filter((p) => p.name || p.room)
+                        : [];
                       return (
-                        <td key={di} className="px-3 py-3 align-top">
+                        <td key={di} className="px-3 py-3 text-center align-top">
                           {cell ? (
                             <>
-                              <div className="font-medium">{cell.subject}</div>
-                              <div className="text-xs text-slate-500">
-                                {cell.teachers?.full_name}
-                                {cell.room ? ` · ${cell.room}-xona` : ""}
-                              </div>
+                              <div className="font-bold">{cell.subject}</div>
+                              {people.map((p, i) => (
+                                <div key={i} className="text-xs text-slate-500">
+                                  {p.name}
+                                  {p.room ? `${p.name ? " · " : ""}${p.room}-xona` : ""}
+                                </div>
+                              ))}
                             </>
                           ) : (
                             <span className="text-slate-300">—</span>
